@@ -407,7 +407,10 @@ namespace DumpWinMD
                 Console.WriteLine("Usage: DumpWinMd <assembly.winmd>");
                 Console.WriteLine("Dumps information from a Windows Metadata file onto XML");
             }
-            new Program().DumpTypes(args[0]);
+            else
+            {
+                new Program().DumpTypes(args[0]);
+            }
         }
         
     }
