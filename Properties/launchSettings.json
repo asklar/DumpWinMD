@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DumpWinMD": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\rnw\\vnext\\target\\x86\\Debug\\Microsoft.ReactNative\\Microsoft.ReactNative.winmd"
+    }
+  }
+}
