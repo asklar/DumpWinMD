@@ -69,7 +69,7 @@ namespace DumpWinMD
             return content.Value as string;
         }
 
-        Dictionary<string, object> GetCustomAttrs(IHasCustomAttributes t)
+        Dictionary<string, object> GetCustomAttrs(IMrHasCustomAttributes t)
         {
             var map = new Dictionary<string, object>();
             foreach (var a in t.GetCustomAttributes())
@@ -92,7 +92,7 @@ namespace DumpWinMD
                     case "DeprecatedAttribute":
                         {
                             var val = a.CustomAttribute;
-                            a.GetArguments(out var fixedArgs, out var namedArgs);//, windows_winmd);
+                            a.GetArguments(out var fixedArgs, out var namedArgs);
                             map["deprecated"] = fixedArgs[0].Value;
                             break;
                         }
@@ -100,8 +100,7 @@ namespace DumpWinMD
             }
             return map;
         }
-        MrAssembly windows_winmd;
-
+        
         string GetTypeKind(MrType t)
         {
             if (t.IsClass && t.GetInvokeMethod() != null && t.GetBaseType().GetName() == "MulticastDelegate") return "delegate";
@@ -114,10 +113,10 @@ namespace DumpWinMD
 
         XmlWriter writer;
 
-        void DumpTypes()
+        void DumpTypes(string path)
         {
-            MemoryStream ms = new MemoryStream();
-            writer = XmlWriter.Create(ms, new XmlWriterSettings() { Indent = true });
+            var output = Path.ChangeExtension(path, "xml");
+            writer = XmlWriter.Create(output, new XmlWriterSettings() { Indent = true });
             writer.WriteStartDocument();
             var context = new MrLoadContext(true);
             context.FakeTypeRequired += (sender, e) => {
@@ -127,8 +126,8 @@ namespace DumpWinMD
                     e.ReplacementType = ctx.GetTypeFromAssembly(e.TypeName, "Windows");
                 }
             };
-            windows_winmd = context.LoadAssemblyFromPath(@"C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.19041.0\Windows.winmd");//, "Windows.winmd");
-            var assembly = context.LoadAssemblyFromPath(@"C:\rnw\vnext\target\x86\Debug\Microsoft.ReactNative\Microsoft.ReactNative.winmd");
+            var windows_winmd = context.LoadAssemblyFromPath(@"C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.19041.0\Windows.winmd");//, "Windows.winmd");
+            var assembly = context.LoadAssemblyFromPath(path); // @"C:\rnw\vnext\target\x86\Debug\Microsoft.ReactNative\Microsoft.ReactNative.winmd");
             context.FinishLoading();
             var types = assembly.GetAllTypes().Skip(1);
 
@@ -138,7 +137,7 @@ namespace DumpWinMD
 
             foreach (var t in types)
             {
-                if (IsExclusiveInterface(t))
+                if (IsExclusiveInterface(t) || IsAttribute(t))
                 {
                     continue;
                 }
@@ -247,7 +246,9 @@ namespace DumpWinMD
                     writer.WriteStartElement("member");
                     writer.WriteAttributeString("name", m.GetName());
                     writer.WriteAttributeString("kind", "field");
-
+                    var constant = m.GetConstantValue(out var type);
+                    if (constant != null)
+                        writer.WriteAttributeString("value", constant.ToString());
                     WriteAttrs(mattrs);
                     writer.WriteEndElement();
                     Debug.WriteLine($"  field {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
@@ -271,11 +272,11 @@ namespace DumpWinMD
             writer.WriteEndDocument();
             writer.Flush();
             writer.Close();
-            ms.Position = 0;
-            using (TextReader tr = new StreamReader(ms))
-            {
-                var xml = tr.ReadToEnd();
-            }
+        }
+
+        private static bool IsAttribute(MrType t)
+        {
+            return (t.GetBaseType() != null && t.GetBaseType().GetFullName() == typeof(Attribute).FullName);
         }
 
         private static string MapManagedTypeToWinRtType(MrType t)
@@ -401,7 +402,12 @@ namespace DumpWinMD
 
         static void Main(string[] args)
         {
-            new Program().DumpTypes();
+            if (args.Length != 1)
+            {
+                Console.WriteLine("Usage: DumpWinMd <assembly.winmd>");
+                Console.WriteLine("Dumps information from a Windows Metadata file onto XML");
+            }
+            new Program().DumpTypes(args[0]);
         }
         
     }
