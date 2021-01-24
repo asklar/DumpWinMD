@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="assembly">
+    <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+        <xs:element ref="class"/>
+        <xs:element ref="delegate"/>
+        <xs:element ref="enum"/>
+        <xs:element ref="interface"/>
+        <xs:element ref="struct"/>
+      </xs:choice>
+      <xs:attribute name="namespace" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="class">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" ref="summary"/>
+        <xs:element minOccurs="0" ref="extends"/>
+        <xs:element minOccurs="0" ref="implements"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="property"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="method"/>
+        <xs:element minOccurs="0" ref="ctor"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="event"/>
+      </xs:sequence>
+      <xs:attribute name="abstract" type="xs:boolean"/>
+      <xs:attribute name="experimental" type="xs:boolean"/>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="implements">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" ref="type"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ctor">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="params"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="event">
+    <xs:complexType>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="delegate">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" ref="summary"/>
+        <xs:element ref="type"/>
+        <xs:element ref="params"/>
+      </xs:sequence>
+      <xs:attribute name="experimental" type="xs:boolean"/>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="enum">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" ref="field"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="interface">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" ref="summary"/>
+        <xs:choice>
+          <xs:element ref="extends"/>
+          <xs:element minOccurs="0" maxOccurs="unbounded" ref="property"/>
+        </xs:choice>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="method"/>
+      </xs:sequence>
+      <xs:attribute name="experimental" type="xs:boolean"/>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="struct">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" ref="field"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="field">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" ref="summary"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+      <xs:attribute name="value" type="xs:integer"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="summary" type="xs:string"/>
+  <xs:element name="type">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" ref="params"/>
+      </xs:sequence>
+      <xs:attribute name="array" type="xs:boolean"/>
+      <xs:attribute name="generic" type="xs:boolean"/>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="params">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="param"/>
+        <xs:element minOccurs="0" maxOccurs="unbounded" ref="type"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="param">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="type"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="extends">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element ref="type"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="property">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element minOccurs="0" ref="summary"/>
+        <xs:element minOccurs="0" ref="default"/>
+        <xs:element minOccurs="0" ref="deprecated"/>
+        <xs:element ref="type"/>
+      </xs:sequence>
+      <xs:attribute name="isReadonly" type="xs:boolean"/>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+      <xs:attribute name="static" type="xs:boolean"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="default" type="xs:anyURI"/>
+  <xs:element name="method">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:choice minOccurs="0">
+          <xs:element ref="deprecated"/>
+          <xs:element ref="summary"/>
+        </xs:choice>
+        <xs:element ref="type"/>
+        <xs:element ref="params"/>
+      </xs:sequence>
+      <xs:attribute name="name" use="required" type="xs:NCName"/>
+      <xs:attribute name="static" type="xs:boolean"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="deprecated" type="xs:string"/>
+</xs:schema>

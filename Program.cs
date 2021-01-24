@@ -164,15 +164,17 @@ namespace DumpWinMD
 
                 if (t.GetBaseType() != null && !baseTypesToSkip.Contains(t.GetBaseType().GetFullName()))
                 {
-                    writer.WriteElementString("baseType", t.GetBaseType().GetFullName());
+                    writer.WriteStartElement("extends");
+                    WriteType(t.GetBaseType());
+                    writer.WriteEndElement();
                 }
                 var ifaces = t.GetInterfaces().Where(x => !IsExclusiveInterface(x));
                 if (ifaces.Count() > 0)
                 {
-                    writer.WriteStartElement("implements");
+                    writer.WriteStartElement(t.IsClass ? "implements" : "extends");
                     foreach (var i in ifaces)
                     {
-                        writer.WriteElementString("interface", i.GetFullName());
+                        WriteType(i);
                     }
                     writer.WriteEndElement();
                 }
@@ -183,9 +185,8 @@ namespace DumpWinMD
                     var mattrs = GetCustomAttrs(m);
                     var mattrsGetter = GetCustomAttrs(m.Getter);
                     foreach (var kv in mattrsGetter) { mattrs[kv.Key] = kv.Value; }
-                    writer.WriteStartElement("member");
+                    writer.WriteStartElement("property");
                     writer.WriteAttributeString("name", m.GetName());
-                    writer.WriteAttributeString("kind", "property");
                     bool isStatic = (m.Getter.MethodDefinition.Attributes & System.Reflection.MethodAttributes.Static) == System.Reflection.MethodAttributes.Static;
                     if (isStatic) writer.WriteAttributeString("static", isStatic.ToString().ToLower());
                     bool isReadonly = m.Setter == null || !m.Setter.GetParsedMethodAttributes().IsPublic;
@@ -204,9 +205,8 @@ namespace DumpWinMD
                     foreach (var m in methods)
                     {
                         var mattrs = GetCustomAttrs(m);
-                        writer.WriteStartElement("member");
+                        writer.WriteStartElement("method");
                         writer.WriteAttributeString("name", m.GetName());
-                        writer.WriteAttributeString("kind", "method");
                         bool isStatic = m.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Static);
                         if (isStatic) writer.WriteAttributeString("static", isStatic.ToString().ToLower());
                         bool isAbstract = !t.IsInterface && m.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Abstract);
@@ -221,9 +221,8 @@ namespace DumpWinMD
                     foreach (var m in ctors)
                     {
                         var mattrs = GetCustomAttrs(m);
-                        writer.WriteStartElement("member");
+                        writer.WriteStartElement("ctor");
                         writer.WriteAttributeString("name", m.DeclaringType.GetName());
-                        writer.WriteAttributeString("kind", "ctor");
 
                         WriteAttrs(mattrs);
                         WriteMethodSignature(m, false);
@@ -243,9 +242,8 @@ namespace DumpWinMD
                 foreach (var m in t.GetFields().Where(x => !x.IsSpecialName))
                 {
                     var mattrs = GetCustomAttrs(m);
-                    writer.WriteStartElement("member");
+                    writer.WriteStartElement("field");
                     writer.WriteAttributeString("name", m.GetName());
-                    writer.WriteAttributeString("kind", "field");
                     var constant = m.GetConstantValue(out var type);
                     if (constant != null)
                         writer.WriteAttributeString("value", constant.ToString());
@@ -257,9 +255,8 @@ namespace DumpWinMD
                 foreach (var m in t.GetEvents())
                 {
                     var mattrs = GetCustomAttrs(m);
-                    writer.WriteStartElement("member");
+                    writer.WriteStartElement("event");
                     writer.WriteAttributeString("name", m.GetName());
-                    writer.WriteAttributeString("kind", "event");
 
                     WriteAttrs(mattrs);
                     writer.WriteEndElement();
@@ -317,21 +314,21 @@ namespace DumpWinMD
                 writer.WriteAttributeString("array", "true");
                 name = name.Replace("[]", "");
             }
+
+            writer.WriteAttributeString("name", name);
+
             if (!gargs.IsEmpty)
             {
-                writer.WriteStartElement("generic");
-                writer.WriteAttributeString("type", name);
+                writer.WriteAttributeString("generic", "true");
                 writer.WriteStartElement("params");
                 foreach (var p in gparams)
                 {
                     WriteType(p);
                 }
                 writer.WriteEndElement();
-                writer.WriteEndElement();
             }
             else
             {
-                writer.WriteString(name);
             }
             writer.WriteEndElement();
         }
@@ -377,15 +374,12 @@ namespace DumpWinMD
             if (returnType) WriteType(m.MethodSignature.ReturnType);
 
             writer.WriteStartElement("params");
-            int i = 0;
             foreach (var p in m.GetParameters())
             {
                 writer.WriteStartElement("param");
                 writer.WriteAttributeString("name", p.GetParameterName());
-                writer.WriteAttributeString("index", i.ToString());
                 WriteType(p.GetParameterType());
 
-                i++;
                 writer.WriteEndElement();
             }
             writer.WriteEndElement();
