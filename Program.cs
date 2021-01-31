@@ -69,7 +69,7 @@ namespace DumpWinMD
             return content.Value as string;
         }
 
-        Dictionary<string, object> GetCustomAttrs(IMrHasCustomAttributes t)
+        Dictionary<string, object> GetCustomAttrs(MrTypeAndMemberBase t)
         {
             var map = new Dictionary<string, object>();
             foreach (var a in t.GetCustomAttributes())
