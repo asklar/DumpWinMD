@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\middleweight-reflection\MiddleweightReflection\MiddleweightReflection.csproj" />
+    <PackageReference Include="MikeHillberg.MiddleweightReflection" Version="1.0.2" />
   </ItemGroup>
 
 </Project>
