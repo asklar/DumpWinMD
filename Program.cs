@@ -113,11 +113,45 @@ namespace DumpWinMD
 
         XmlWriter writer;
 
+        struct PropKey : IComparable<PropKey>
+        {
+            public string JSName { get; set; }
+            public string FromXamlType { get; set; }
+
+            public int CompareTo(PropKey other)
+            {
+                var r = JSName.CompareTo(other.JSName);
+                if (r != 0) return r;
+                return FromXamlType.CompareTo(other.FromXamlType);
+            }
+        }
+
+        /*
+   const std::map<std::string, std::function<xaml::DependencyObject()>> xamlTypeCreatorMap = {
+    { "hyperlinkButton", CREATE_TYPE(HyperlinkButton)},
+    { "textblock", CREATE_TYPE(TextBlock)},
+  };
+
+  const std::multimap<std::string, PropInfo> xamlPropertyMap = {
+    { "width", { MAKE_GET_DP(FrameworkElement, WidthProperty), FromJSType::Double, XamlPropType::Double }},
+    { "height", { MAKE_GET_DP(FrameworkElement, HeightProperty), FromJSType::Double, XamlPropType::Double }},
+    { "text", { MAKE_GET_DP(ContentControl, ContentProperty), FromJSType::String, XamlPropType::Object }},
+    { "text", { MAKE_GET_DP(TextBlock, TextProperty), FromJSType::String, XamlPropType::String }},
+    { "color", { MAKE_GET_DP(Control, ForegroundProperty), FromJSType::SolidColorBrush, XamlPropType::Object }},
+    { "color", { MAKE_GET_DP(TextBlock, ForegroundProperty), FromJSType::SolidColorBrush, XamlPropType::Object }},
+    { "backgroundColor", { MAKE_GET_DP(Control, BackgroundProperty), FromJSType::SolidColorBrush, XamlPropType::Object }},
+  };
+
+    const std::map<std::string, std::function<void(IInspectable o, IReactContext context)> > xamlEventMap = {
+        MAKE_EVENT(Click, xaml::Controls::Primitives::ButtonBase),
+    };
+         */
+
         void DumpTypes(string path)
         {
-            var output = Path.ChangeExtension(path, "xml");
-            writer = XmlWriter.Create(output, new XmlWriterSettings() { Indent = true });
-            writer.WriteStartDocument();
+            //var output = Path.ChangeExtension(path, "xml");
+            //writer = XmlWriter.Create(output, new XmlWriterSettings() { Indent = true });
+            //writer.WriteStartDocument();
             var context = new MrLoadContext(true);
             context.FakeTypeRequired += (sender, e) => {
                 var ctx = sender as MrLoadContext;
@@ -127,148 +161,260 @@ namespace DumpWinMD
                 }
             };
             var windows_winmd = context.LoadAssemblyFromPath(@"C:\Program Files (x86)\Windows Kits\10\UnionMetadata\10.0.19041.0\Windows.winmd");//, "Windows.winmd");
-            var assembly = context.LoadAssemblyFromPath(path); // @"C:\rnw\vnext\target\x86\Debug\Microsoft.ReactNative\Microsoft.ReactNative.winmd");
+//            var assembly = context.LoadAssemblyFromPath(path); // @"C:\rnw\vnext\target\x86\Debug\Microsoft.ReactNative\Microsoft.ReactNative.winmd");
             context.FinishLoading();
-            var types = assembly.GetAllTypes().Skip(1);
-
-            var namespaces = assembly.GetAllTypes().Skip(1).Select(x => x.GetNamespace()).Distinct();
-            writer.WriteStartElement("assembly");
-            writer.WriteAttributeString("namespace", namespaces.FirstOrDefault());
-
-            foreach (var t in types)
+            var types = windows_winmd.GetAllTypes().Skip(1);
+            var fe = types.Where(type => IsFrameworkElementDerived(type));
+            SortedDictionary<PropKey, string> output = new SortedDictionary<PropKey, string>();
+            foreach (var type in fe)
             {
-                if (IsExclusiveInterface(t) || IsAttribute(t))
+                foreach (var prop in type.GetProperties())
                 {
-                    continue;
-                }
-                writer.WriteStartElement(GetTypeKind(t));
-                writer.WriteAttributeString("name", t.GetName());
-                if (!t.IsInterface && t.IsAbstract)
-                {
-                    writer.WriteAttributeString("abstract", "true");
-                }
-                var attrs = GetCustomAttrs(t);
-                WriteAttrs(attrs);
-
-                Debug.WriteLine($"{GetTypeKind(t)} {t.GetName()} {attrs.GetValueOrDefault("docstring")} {attrs.GetValueOrDefault("docdefault")}");
-                var kind = GetTypeKind(t);
-
-                var baseTypesToSkip = new string[]
-                {
-                    typeof(MulticastDelegate).FullName,
-                    typeof(ValueType).FullName,
-                    typeof(Enum).FullName,
-                    typeof(object).FullName,
-                    typeof(Attribute).FullName,
-                };
-
-                if (t.GetBaseType() != null && !baseTypesToSkip.Contains(t.GetBaseType().GetFullName()))
-                {
-                    writer.WriteStartElement("extends");
-                    WriteType(t.GetBaseType());
-                    writer.WriteEndElement();
-                }
-                var ifaces = t.GetInterfaces().Where(x => !IsExclusiveInterface(x));
-                if (ifaces.Count() > 0)
-                {
-                    writer.WriteStartElement(t.IsClass ? "implements" : "extends");
-                    foreach (var i in ifaces)
+                    // { "width", { MAKE_GET_DP(FrameworkElement, WidthProperty), FromJSType::Double, XamlPropType::Double } },
+                    var name = prop.GetName();
+                    if (prop.Getter.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Static)) continue;
+                    var propType = prop.GetPropertyType();
+                    var jsType = GetFromJSType(propType);
+                    if (jsType != FromJSType.Null)
                     {
-                        WriteType(i);
+                        string jsname = name[0].ToString().ToLower() + name.Substring(1);
+                        string rest = $"{{ MAKE_GET_DP({type.GetFullName().Replace(".", "::")}, {name}Property), FromJSType::{jsType.ToString()}, ... }}";
+                        var key = new PropKey() { JSName = jsname, FromXamlType = type.GetFullName() };
+                        output[key] = rest;
                     }
-                    writer.WriteEndElement();
+                    //var xamlPropType = GetXamlPropType(propType);
                 }
-
-
-                foreach (var m in t.GetProperties())
-                {
-                    var mattrs = GetCustomAttrs(m);
-                    var mattrsGetter = GetCustomAttrs(m.Getter);
-                    foreach (var kv in mattrsGetter) { mattrs[kv.Key] = kv.Value; }
-                    writer.WriteStartElement("property");
-                    writer.WriteAttributeString("name", m.GetName());
-                    bool isStatic = (m.Getter.MethodDefinition.Attributes & System.Reflection.MethodAttributes.Static) == System.Reflection.MethodAttributes.Static;
-                    if (isStatic) writer.WriteAttributeString("static", isStatic.ToString().ToLower());
-                    bool isReadonly = m.Setter == null || !m.Setter.GetParsedMethodAttributes().IsPublic;
-                    if (isReadonly) writer.WriteAttributeString("isReadonly", isReadonly.ToString().ToLower());
-                    WriteAttrs(mattrs);
-                    WriteType(m.GetPropertyType());
-
-                    writer.WriteEndElement();
-                    Debug.WriteLine($"  prop {m.GetPropertyType().GetPrettyFullName()} {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
-
-                }
-
-                t.GetMethodsAndConstructors(out var methods, out var ctors);
-                if (GetTypeKind(t) != "delegate")
-                {
-                    foreach (var m in methods)
-                    {
-                        var mattrs = GetCustomAttrs(m);
-                        writer.WriteStartElement("method");
-                        writer.WriteAttributeString("name", m.GetName());
-                        bool isStatic = m.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Static);
-                        if (isStatic) writer.WriteAttributeString("static", isStatic.ToString().ToLower());
-                        bool isAbstract = !t.IsInterface && m.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Abstract);
-                        if (isAbstract) writer.WriteAttributeString("abstract", isAbstract.ToString().ToLower());
-
-                        WriteAttrs(mattrs);
-                        WriteMethodSignature(m);
-                        writer.WriteEndElement();
-                        Debug.WriteLine($"  method {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
-                    }
-
-                    foreach (var m in ctors)
-                    {
-                        var mattrs = GetCustomAttrs(m);
-                        writer.WriteStartElement("ctor");
-                        writer.WriteAttributeString("name", m.DeclaringType.GetName());
-
-                        WriteAttrs(mattrs);
-                        WriteMethodSignature(m, false);
-                        writer.WriteEndElement();
-                        Debug.WriteLine($"  ctor {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
-                    }
-                }
-                else
-                {
-                    var m = t.GetInvokeMethod();
-                    var mattrs = GetCustomAttrs(m);
-
-                    WriteAttrs(mattrs);
-                    WriteMethodSignature(m);
-                }
-
-                foreach (var m in t.GetFields().Where(x => !x.IsSpecialName))
-                {
-                    var mattrs = GetCustomAttrs(m);
-                    writer.WriteStartElement("field");
-                    writer.WriteAttributeString("name", m.GetName());
-                    var constant = m.GetConstantValue(out var type);
-                    if (constant != null)
-                        writer.WriteAttributeString("value", constant.ToString());
-                    WriteAttrs(mattrs);
-                    writer.WriteEndElement();
-                    Debug.WriteLine($"  field {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
-                }
-
-                foreach (var m in t.GetEvents())
-                {
-                    var mattrs = GetCustomAttrs(m);
-                    writer.WriteStartElement("event");
-                    writer.WriteAttributeString("name", m.GetName());
-
-                    WriteAttrs(mattrs);
-                    writer.WriteEndElement();
-                    Debug.WriteLine($"  event {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
-                }
-
-                writer.WriteEndElement();
             }
-            writer.WriteEndElement();
-            writer.WriteEndDocument();
-            writer.Flush();
-            writer.Close();
+            foreach (var entry in output)
+            {
+                Console.WriteLine($"{{ \"{entry.Key.JSName}\", {entry.Value} }}");
+            }
+
+            Console.WriteLine($"{output.Count} properties");
+
+            //var namespaces = assembly.GetAllTypes().Skip(1).Select(x => x.GetNamespace()).Distinct();
+            //writer.WriteStartElement("assembly");
+            //writer.WriteAttributeString("namespace", namespaces.FirstOrDefault());
+
+            //foreach (var t in types)
+            //{
+            //    if (IsExclusiveInterface(t) || IsAttribute(t))
+            //    {
+            //        continue;
+            //    }
+            //    writer.WriteStartElement(GetTypeKind(t));
+            //    writer.WriteAttributeString("name", t.GetName());
+            //    if (!t.IsInterface && t.IsAbstract)
+            //    {
+            //        writer.WriteAttributeString("abstract", "true");
+            //    }
+            //    var attrs = GetCustomAttrs(t);
+            //    WriteAttrs(attrs);
+
+            //    Debug.WriteLine($"{GetTypeKind(t)} {t.GetName()} {attrs.GetValueOrDefault("docstring")} {attrs.GetValueOrDefault("docdefault")}");
+            //    var kind = GetTypeKind(t);
+
+            //    var baseTypesToSkip = new string[]
+            //    {
+            //        typeof(MulticastDelegate).FullName,
+            //        typeof(ValueType).FullName,
+            //        typeof(Enum).FullName,
+            //        typeof(object).FullName,
+            //        typeof(Attribute).FullName,
+            //    };
+
+            //    if (t.GetBaseType() != null && !baseTypesToSkip.Contains(t.GetBaseType().GetFullName()))
+            //    {
+            //        writer.WriteStartElement("extends");
+            //        WriteType(t.GetBaseType());
+            //        writer.WriteEndElement();
+            //    }
+            //    var ifaces = t.GetInterfaces().Where(x => !IsExclusiveInterface(x));
+            //    if (ifaces.Count() > 0)
+            //    {
+            //        writer.WriteStartElement(t.IsClass ? "implements" : "extends");
+            //        foreach (var i in ifaces)
+            //        {
+            //            WriteType(i);
+            //        }
+            //        writer.WriteEndElement();
+            //    }
+
+
+            //    foreach (var m in t.GetProperties())
+            //    {
+            //        var mattrs = GetCustomAttrs(m);
+            //        var mattrsGetter = GetCustomAttrs(m.Getter);
+            //        foreach (var kv in mattrsGetter) { mattrs[kv.Key] = kv.Value; }
+            //        writer.WriteStartElement("property");
+            //        writer.WriteAttributeString("name", m.GetName());
+            //        bool isStatic = (m.Getter.MethodDefinition.Attributes & System.Reflection.MethodAttributes.Static) == System.Reflection.MethodAttributes.Static;
+            //        if (isStatic) writer.WriteAttributeString("static", isStatic.ToString().ToLower());
+            //        bool isReadonly = m.Setter == null || !m.Setter.GetParsedMethodAttributes().IsPublic;
+            //        if (isReadonly) writer.WriteAttributeString("isReadonly", isReadonly.ToString().ToLower());
+            //        WriteAttrs(mattrs);
+            //        WriteType(m.GetPropertyType());
+
+            //        writer.WriteEndElement();
+            //        Debug.WriteLine($"  prop {m.GetPropertyType().GetPrettyFullName()} {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
+
+            //    }
+
+            //    t.GetMethodsAndConstructors(out var methods, out var ctors);
+            //    if (GetTypeKind(t) != "delegate")
+            //    {
+            //        foreach (var m in methods)
+            //        {
+            //            var mattrs = GetCustomAttrs(m);
+            //            writer.WriteStartElement("method");
+            //            writer.WriteAttributeString("name", m.GetName());
+            //            bool isStatic = m.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Static);
+            //            if (isStatic) writer.WriteAttributeString("static", isStatic.ToString().ToLower());
+            //            bool isAbstract = !t.IsInterface && m.MethodDefinition.Attributes.HasFlag(System.Reflection.MethodAttributes.Abstract);
+            //            if (isAbstract) writer.WriteAttributeString("abstract", isAbstract.ToString().ToLower());
+
+            //            WriteAttrs(mattrs);
+            //            WriteMethodSignature(m);
+            //            writer.WriteEndElement();
+            //            Debug.WriteLine($"  method {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
+            //        }
+
+            //        foreach (var m in ctors)
+            //        {
+            //            var mattrs = GetCustomAttrs(m);
+            //            writer.WriteStartElement("ctor");
+            //            writer.WriteAttributeString("name", m.DeclaringType.GetName());
+
+            //            WriteAttrs(mattrs);
+            //            WriteMethodSignature(m, false);
+            //            writer.WriteEndElement();
+            //            Debug.WriteLine($"  ctor {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
+            //        }
+            //    }
+            //    else
+            //    {
+            //        var m = t.GetInvokeMethod();
+            //        var mattrs = GetCustomAttrs(m);
+
+            //        WriteAttrs(mattrs);
+            //        WriteMethodSignature(m);
+            //    }
+
+            //    foreach (var m in t.GetFields().Where(x => !x.IsSpecialName))
+            //    {
+            //        var mattrs = GetCustomAttrs(m);
+            //        writer.WriteStartElement("field");
+            //        writer.WriteAttributeString("name", m.GetName());
+            //        var constant = m.GetConstantValue(out var type);
+            //        if (constant != null)
+            //            writer.WriteAttributeString("value", constant.ToString());
+            //        WriteAttrs(mattrs);
+            //        writer.WriteEndElement();
+            //        Debug.WriteLine($"  field {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
+            //    }
+
+            //    foreach (var m in t.GetEvents())
+            //    {
+            //        var mattrs = GetCustomAttrs(m);
+            //        writer.WriteStartElement("event");
+            //        writer.WriteAttributeString("name", m.GetName());
+
+            //        WriteAttrs(mattrs);
+            //        writer.WriteEndElement();
+            //        Debug.WriteLine($"  event {m.GetName()} {mattrs.GetValueOrDefault("docstring")} {mattrs.GetValueOrDefault("docdefault")}");
+            //    }
+
+            //    writer.WriteEndElement();
+            //}
+            //writer.WriteEndElement();
+            //writer.WriteEndDocument();
+            //writer.Flush();
+            //writer.Close();
+        }
+
+        enum FromJSType
+        {
+            Null = 0,
+            Object = 1,
+            Array = 2,
+            String = 3,
+            Boolean = 4,
+            Int64 = 5,
+            Double = 6,
+            SolidColorBrush = 7,
+            Thickness = 8,
+        }
+
+        Dictionary<string, FromJSType> jsTypeMap = new Dictionary<string, FromJSType>()
+        {
+            { "System.String", FromJSType.String },
+            { "System.Array", FromJSType.Array },
+            { "System.Object", FromJSType.Object },
+            { "System.Boolean", FromJSType.Boolean },
+            { "System.Int32", FromJSType.Int64 },
+            { "System.Int64", FromJSType.Int64 },
+            { "System.Double", FromJSType.Double },
+            { "System.Single", FromJSType.Double },
+            { "Windows.UI.Xaml.Thickness", FromJSType.Thickness },
+            { "Windows.UI.Xaml.HorizontalAlignment", FromJSType.String },
+            { "Windows.UI.Xaml.VerticalAlignment", FromJSType.String },
+            { "Windows.UI.Xaml.Media.Brush", FromJSType.SolidColorBrush },
+            { "Windows.UI.Xaml.Media.SolidColorBrush", FromJSType.SolidColorBrush },
+            { "Windows.UI.Text.FontWeight", FromJSType.String },
+            { "Windows.UI.Text.FontStyle", FromJSType.String },
+            { "Windows.UI.Text.FontStretch", FromJSType.String },
+            { "Windows.UI.Xaml.Media.FontFamily", FromJSType.String },
+            { "Windows.UI.Xaml.Input.KeyboardNavigationMode", FromJSType.String },
+            { "Windows.UI.Xaml.Controls.ControlTemplate", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.FocusState", FromJSType.String },
+            { "Windows.UI.Xaml.DependencyObject", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.RequiresPointer", FromJSType.String },
+            { "Windows.UI.Xaml.ElementSoundMode", FromJSType.String },
+            { "System.Uri", FromJSType.String },
+            { "Windows.UI.Xaml.CornerRadius", FromJSType.Array },
+            { "Windows.UI.Xaml.Controls.BackgroundSizing", FromJSType.String },
+            { "Windows.UI.Xaml.Media.Animation.TransitionCollection", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.DataTemplateSelector", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.DataTemplate", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.UIElement", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.AppBarClosedDisplayMode", FromJSType.String },
+            { "Windows.UI.Xaml.Controls.Primitives.AppBarTemplateSettings", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.LightDismissOverlayMode", FromJSType.String },
+            { "System.Windows.Input.ICommand", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.ClickMode", FromJSType.String },
+            { "Windows.UI.Xaml.Controls.Primitives.FlyoutBase", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.IconElement", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.CommandBarLabelPosition", FromJSType.String },
+            { "Windows.UI.Xaml.Controls.Primitives.AppBarButtonTemplateSettings", FromJSType.Null }, // NYI
+            { "System.Nullable`1", FromJSType.String }, // Nullable<bool> for IsChecked
+            { "Windows.UI.Xaml.Controls.Primitives.AppBarToggleButtonTemplateSettings", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.ItemsPanelTemplate", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Controls.StyleSelector", FromJSType.Null }, // NYI
+            { "Windows.UI.Xaml.Style", FromJSType.Null },
+            { "Windows.UI.Xaml.Controls.GroupStyleSelector", FromJSType.Null },
+            { "Windows.Foundation.Collections.IObservableVector`1", FromJSType.Null },
+        };
+
+        private FromJSType GetFromJSType(MrType propType)
+        {
+            if (propType.IsEnum) return FromJSType.String;
+            if (jsTypeMap.ContainsKey(propType.GetFullName()))
+            {
+                return jsTypeMap[propType.GetFullName()];
+            }
+            else
+            {
+                Console.WriteLine(propType.GetPrettyFullName());
+                return FromJSType.Null;
+            }
+        }
+
+        private bool IsFrameworkElementDerived(MrType type)
+        {
+            if (type.GetBaseType() == null) return false;
+            var bt = type.GetBaseType().GetFullName();
+            if (bt == "Windows.UI.Xaml.FrameworkElement") return true;
+            else return IsFrameworkElementDerived(type.GetBaseType());
         }
 
         private static bool IsAttribute(MrType t)
